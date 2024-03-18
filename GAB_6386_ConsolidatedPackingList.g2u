@@ -1,0 +1,682 @@
+﻿Program.Sub.ScreenSU.Start
+Gui.frmMain..Create(BaseForm)
+Gui.frmMain..Caption("Consolidated Packing List (6386)")
+Gui.frmMain..Size(1121,454)
+Gui.frmMain..MinX(0)
+Gui.frmMain..MinY(0)
+Gui.frmMain..Position(0,0)
+Gui.frmMain..AlwaysOnTop(False)
+Gui.frmMain..FontName("Tahoma")
+Gui.frmMain..FontSize(8.25)
+Gui.frmMain..ControlBox(True)
+Gui.frmMain..MaxButton(True)
+Gui.frmMain..MinButton(True)
+Gui.frmMain..MousePointer(0)
+Gui.frmMain..Moveable(True)
+Gui.frmMain..Sizeable(True)
+Gui.frmMain..ShowInTaskBar(True)
+Gui.frmMain..TitleBar(True)
+Gui.frmMain..Event(UnLoad,frmMain_UnLoad)
+Gui.frmMain.gsgcPackingList.Create(GsGridControl)
+Gui.frmMain.gsgcPackingList.Enabled(True)
+Gui.frmMain.gsgcPackingList.Visible(True)
+Gui.frmMain.gsgcPackingList.Zorder(0)
+Gui.frmMain.gsgcPackingList.Size(1096,379)
+Gui.frmMain.gsgcPackingList.Position(14,37)
+Gui.frmMain.gsgcPackingList.Anchor(15)
+Gui.frmMain.gsgcPackingList.Event(CellValueChanged,gsgcPackingList_CellValueChanged)
+Gui.frmMain.picCollapseAll.Create(PictureBox)
+Gui.frmMain.picCollapseAll.Enabled(True)
+Gui.frmMain.picCollapseAll.Visible(True)
+Gui.frmMain.picCollapseAll.Zorder(0)
+Gui.frmMain.picCollapseAll.Size(24,24)
+Gui.frmMain.picCollapseAll.Position(43,6)
+Gui.frmMain.picCollapseAll.ToolTip("Collapse All")
+Gui.frmMain.picCollapseAll.Event(Click,cmdCollapseAll_Click)
+Gui.frmMain.picCollapseAll.Dock(0)
+Gui.frmMain.picExpandAll.Create(PictureBox)
+Gui.frmMain.picExpandAll.Enabled(True)
+Gui.frmMain.picExpandAll.Visible(True)
+Gui.frmMain.picExpandAll.Zorder(0)
+Gui.frmMain.picExpandAll.Size(24,24)
+Gui.frmMain.picExpandAll.Position(13,6)
+Gui.frmMain.picExpandAll.ToolTip("Expand All")
+Gui.frmMain.picExpandAll.Event(Click,cmdExpandAll_Click)
+Gui.frmMain.picRefresh.Create(PictureBox)
+Gui.frmMain.picRefresh.Enabled(True)
+Gui.frmMain.picRefresh.Visible(True)
+Gui.frmMain.picRefresh.Zorder(0)
+Gui.frmMain.picRefresh.Size(24,24)
+Gui.frmMain.picRefresh.Position(73,6)
+Gui.frmMain.picRefresh.ToolTip("Refresh")
+Gui.frmMain.picRefresh.Event(Click,cmdRefresh_Click)
+Gui.frmMain.picPrintPreview.Create(PictureBox)
+Gui.frmMain.picPrintPreview.Enabled(True)
+Gui.frmMain.picPrintPreview.Visible(True)
+Gui.frmMain.picPrintPreview.Zorder(0)
+Gui.frmMain.picPrintPreview.Size(24,24)
+Gui.frmMain.picPrintPreview.Position(103,6)
+Gui.frmMain.picPrintPreview.ToolTip("Print Preview")
+Gui.frmMain.picPrintPreview.Event(Click,cmdPrintPreview_Click)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+	V.Global.bUseRevision.Declare(Boolean)
+	V.Global.iReportID.Declare(Long)
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	
+	F.Intrinsic.UI.UsePixels ' Allows you to use Pixels instead of Twips throughout
+	
+	F.ODBC.Connection!conx.OpenCompanyConnection(600)
+	
+	'Get whether using Revision Level
+	F.Global.General.ReadOption(70008,0,False,0,V.Global.bUseRevision)
+	
+	'Get the custom Consolidated Packing List report ID
+	F.Global.BI.GetIDFromName("GAB_6386_CON_PACKLIST.rpt",True,V.Global.iReportID)
+	
+	F.Intrinsic.Control.CallSub(SetPictureBox)
+	F.Intrinsic.Control.CallSub(CheckCustomTables)
+	F.Intrinsic.Control.CallSub(LoadConsolidatedPackingList)
+	
+	Gui.frmMain..Show
+	
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}GAB Version: {5}}",V.Ambient.ScriptPath,V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Ambient.GABVersion,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.LoadConsolidatedPackingList.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	V.Local.sQuery.Declare
+	
+	'Hide the Gridcontrol
+	Gui.frmMain.gsgcPackingList.Visible(False)
+	
+	'Delete existing DataTable & DataView
+	F.Intrinsic.Control.If(V.DataTable.dtConsPackList.Exists)
+		F.Intrinsic.Control.If(V.DataView.dtConsPackList!dvConsPackList.Exists)
+			F.Data.DataView.Close("dtConsPackList$dtLine","dvConsPackListLine")
+			F.Data.DataView.Close("dtConsPackList","dvConsPackList")
+		F.Intrinsic.Control.EndIf
+		F.Data.DataTable.Close("dtConsPackList$dtLine")
+		F.Data.DataTable.close("dtConsPackList")
+	F.Intrinsic.Control.EndIf
+	
+	'Get all the Consolidated Packing List that have not been printed
+'	F.Intrinsic.Control.If(V.Global.bUseRevision)
+'		V.Local.sQuery.Set("select VENDOR, PURCHASE_ORDER AS PO, LEFT(RECORD_NO,3) AS PO_LINE, PART, DESCRIPTION, QTY_ORDER AS QUANTITY, UM_PURCHASING AS UM, JOB, SUFFIX, SEQUENCE from V_PO_LINES where SUBSTRING(PART,17,1) = '*' AND JOB <> '' AND PACK_LST_PRNT <> 'Y' ORDER BY VENDOR, PO, PO_LINE")
+'	F.Intrinsic.Control.Else
+'		V.Local.sQuery.Set("select VENDOR, PURCHASE_ORDER AS PO, LEFT(RECORD_NO,3) AS PO_LINE, PART, DESCRIPTION, QTY_ORDER AS QUANTITY, UM_PURCHASING AS UM, JOB, SUFFIX, SEQUENCE from V_PO_LINES where SUBSTRING(PART,20,1) =  '*' AND JOB <> '' AND PACK_LST_PRNT <> 'Y' ORDER BY VENDOR, PO, PO_LINE")
+'	F.Intrinsic.Control.EndIf
+	V.Local.sQuery.Set("SELECT VPL.VENDOR, VPL.PURCHASE_ORDER AS PO, LEFT(VPL.RECORD_NO,3) AS PO_LINE, VPL.PART, VPL.DESCRIPTION, VPL.QTY_ORDER AS QUANTITY, VPL.UM_PURCHASING AS UM, VPL.JOB, VPL.SUFFIX, VPL.SEQUENCE FROM V_PO_LINES VPL LEFT JOIN V_JOB_OPERATIONS VJO ON VPL.JOB = VJO.JOB AND VPL.SUFFIX = VJO.SUFFIX AND VPL.SEQUENCE = VJO.SEQ where VPL.JOB <> '' AND VPL.PACK_LST_PRNT <> 'Y' AND VJO.LMO = 'O' ORDER BY VPL.VENDOR, PO, PO_LINE")
+	F.Data.DataTable.CreateFromSQL("dtConsPackList","conx",V.Local.sQuery,True)
+	F.Data.DataTable.AddColumn("dtConsPackList","SELECT_HEADER","Boolean",False)
+	
+	'Get the Material Sequences for the related Work Order
+	'Only pull Material Sequences before the Outside Service sequence and Actual Qty > 0 and Material Sequences are already closed
+'	F.Intrinsic.Control.If(V.Global.bUseRevision)
+'		V.Local.sQuery.Set("SELECT VPL.PURCHASE_ORDER AS PO, LEFT(VPL.RECORD_NO,3) AS PO_LINE, VJO.JOB, VJO.SUFFIX, VJO.SEQ As SEQUENCE, VJO.PART, VJO.DESCRIPTION, VJO.UM, VJO.HOURS_ESTIMATED AS QTY_ESTIMATED, VJO.HOURS_ACTUAL AS QUANTITY FROM V_PO_LINES VPL LEFT JOIN V_JOB_OPERATIONS VJO ON VPL.JOB = VJO.JOB AND VPL.SUFFIX = VJO.SUFFIX WHERE SUBSTRING(VPL.PART,17,1) = '*' and VPL.JOB <> '' AND VPL.PACK_LST_PRNT <> 'Y' and VJO.SEQ < '995000' and VJO.LMO = 'M' and VJO.SEQ < VPL.SEQUENCE and VJO.HOURS_ACTUAL > 0 and VJO.FLAG_CLOSED = 'Y'")
+'	F.Intrinsic.Control.Else
+'		V.Local.sQuery.Set("SELECT VPL.PURCHASE_ORDER AS PO, LEFT(VPL.RECORD_NO,3) AS PO_LINE, VJO.JOB, VJO.SUFFIX, VJO.SEQ As SEQUENCE, VJO.PART, VJO.DESCRIPTION, VJO.UM, VJO.HOURS_ESTIMATED AS QTY_ESTIMATED, VJO.HOURS_ACTUAL AS QUANTITY FROM V_PO_LINES VPL LEFT JOIN V_JOB_OPERATIONS VJO ON VPL.JOB = VJO.JOB AND VPL.SUFFIX = VJO.SUFFIX WHERE SUBSTRING(VPL.PART,20,1) = '*' and VPL.JOB <> '' AND VPL.PACK_LST_PRNT <> 'Y' and VJO.SEQ < '995000' and VJO.LMO = 'M' and VJO.SEQ < VPL.SEQUENCE and VJO.HOURS_ACTUAL > 0 and VJO.FLAG_CLOSED = 'Y'")
+'	F.Intrinsic.Control.EndIf
+	V.Local.sQuery.Set("SELECT B.PO, B.PO_LINE, B.JOB, B.SUFFIX, B.SEQUENCE, VJO.PART, VJO.DESCRIPTION, VJO.UM, VJO.HOURS_ESTIMATED AS QTY_ESTIMATED, VJO.HOURS_ACTUAL AS QUANTITY FROM (SELECT VPL.PURCHASE_ORDER AS PO, LEFT(VPL.RECORD_NO,3) AS PO_LINE, VJO.JOB, VJO.SUFFIX, VJO.SEQ AS SEQUENCE FROM V_PO_LINES VPL LEFT JOIN V_JOB_OPERATIONS VJO ON VPL.JOB = VJO.JOB AND VPL.SUFFIX = VJO.SUFFIX AND VPL.SEQUENCE = VJO.SEQ where VPL.JOB <> '' AND VPL.PACK_LST_PRNT <> 'Y' AND VJO.LMO = 'O') B LEFT JOIN V_JOB_OPERATIONS VJO ON B.JOB = VJO.JOB AND B.SUFFIX = VJO.SUFFIX WHERE VJO.SEQ < '995000' and VJO.LMO = 'M' and VJO.SEQ < B.SEQUENCE and VJO.HOURS_ACTUAL > 0 and VJO.FLAG_CLOSED = 'Y'")
+	F.Data.DataTable.CreateFromSQL("dtConsPackList$dtLine","conx",V.Local.sQuery,True)
+'	F.Data.DataTable.AddRelation("dtConsPackList","JOB*!*SUFFIX","dtConsPackList$dtLine","JOB*!*SUFFIX")
+	F.Data.DataTable.AddRelation("dtConsPackList","PO*!*PO_LINE*!*JOB*!*SUFFIX","dtConsPackList$dtLine","PO*!*PO_LINE*!*JOB*!*SUFFIX")
+	F.Data.DataTable.AddColumn("dtConsPackList$dtLine","SELECT_LINE","Boolean",False)
+	
+	F.Data.DataView.Create("dtConsPackList","dvConsPackList",22,"","VENDOR, PO, PO_LINE ASC")
+	F.Data.DataView.Create("dtConsPackList$dtLine","dvConsPackListLine")
+	Gui.frmMain.gsgcPackingList.AddGridviewFromDataview("gvConsPackList","dtConsPackList","dvConsPackList")
+	Gui.frmMain.gsgcPackingList.AddGridviewFromDataview("gvConsPackListLine","dtConsPackList","dvConsPackListLine")
+
+	Gui.frmMain.gsgcPackingList.MainView("gvConsPackList")
+	
+	'Format the GridView
+	F.Intrinsic.Control.CallSub(FormatConsPackListHeader,"GridControl","gsgcPackingList","GridView","gvConsPackList")
+	F.Intrinsic.Control.CallSub(FormatConsPackListLine,"GridControl","gsgcPackingList","GridView","gvConsPackListLine")
+	
+	'Unhide the GridControl
+	Gui.frmMain.gsgcPackingList.Visible(True)
+	
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Build("Subroutine Error {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub("Unload")	
+F.Intrinsic.Control.EndTry
+Program.Sub.LoadConsolidatedPackingList.End
+
+Program.Sub.FormatConsPackListHeader.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"OptionBehaviorEditable",True)
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"OptionsFindAlwaysVisible",True)
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"AllowSort",True)
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"AllowFilter",True)
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"AllowColumnResizing",True)
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"OptionsViewColumnAutoWidth",False)
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"OptionsViewRowAutoHeight",True)
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"OptionsDetailShowDetailTabs",False)
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"OptionsSelectionEnableAppearanceFocusedRow",True)
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"EnableAppearanceEvenRow",True)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"VENDOR","Caption","Vendor")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"VENDOR","MinWidth","40")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"VENDOR","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"VENDOR","CellHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"VENDOR","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"VENDOR","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"VENDOR","ReadOnly",True)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO","Caption","PO")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO","MinWidth","40")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO","CellHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO","ReadOnly",True)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO_LINE","Caption","PO Line")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO_LINE","MinWidth","30")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO_LINE","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO_LINE","CellHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO_LINE","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO_LINE","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO_LINE","ReadOnly",True)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PART","Caption","Part")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PART","MinWidth","150")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PART","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PART","CellHAlignment","Left")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PART","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PART","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PART","ReadOnly",True)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"DESCRIPTION","Caption","Part Description")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"DESCRIPTION","MinWidth","250")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"DESCRIPTION","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"DESCRIPTION","CellHAlignment","Left")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"DESCRIPTION","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"DESCRIPTION","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"DESCRIPTION","ReadOnly",True)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QUANTITY","Caption","Quantity")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QUANTITY","MinWidth","100")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QUANTITY","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QUANTITY","CellHAlignment","Right")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QUANTITY","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QUANTITY","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QUANTITY","ReadOnly",True)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"UM","Caption","UM")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"UM","Width","40")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"UM","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"UM","CellHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"UM","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"UM","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"UM","ReadOnly",True)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"JOB","Caption","Job")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"JOB","MinWidth","40")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"JOB","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"JOB","CellHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"JOB","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"JOB","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"JOB","ReadOnly",True)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SUFFIX","Caption","Suffix")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SUFFIX","MinWidth","30")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SUFFIX","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SUFFIX","CellHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SUFFIX","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SUFFIX","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SUFFIX","ReadOnly",True)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SEQUENCE","Caption","Sequence")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SEQUENCE","MinWidth","50")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SEQUENCE","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SEQUENCE","CellHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SEQUENCE","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SEQUENCE","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SEQUENCE","ReadOnly",True)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SELECT_HEADER","ShowCaption",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SELECT_HEADER","Width","30")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SELECT_HEADER","Fixed","Left")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SELECT_HEADER","AllowEdit",True)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SELECT_HEADER","ReadOnly",False)
+	
+	
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Build("Subroutine Error {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub("Unload")	
+F.Intrinsic.Control.EndTry
+Program.Sub.FormatConsPackListHeader.End
+
+Program.Sub.FormatConsPackListLine.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"OptionBehaviorEditable",True)
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"OptionsFindAlwaysVisible",True)
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"AllowSort",True)
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"AllowFilter",True)
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"AllowColumnResizing",True)
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"OptionsViewColumnAutoWidth",False)
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"OptionsViewRowAutoHeight",True)
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"OptionsDetailShowDetailTabs",False)
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"OptionsSelectionEnableAppearanceFocusedRow",True)
+	Gui.frmMain.[V.Args.GridControl].SetGridviewProperty(V.Args.GridView,"EnableAppearanceEvenRow",True)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO","Caption","PO")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO","MinWidth","40")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO","CellHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO","ReadOnly",True)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO","Visible",False)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO_LINE","Caption","PO Line")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO_LINE","MinWidth","30")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO_LINE","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO_LINE","CellHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO_LINE","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO_LINE","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO_LINE","ReadOnly",True)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PO_LINE","Visible",False)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"JOB","Caption","Job")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"JOB","MinWidth","40")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"JOB","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"JOB","CellHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"JOB","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"JOB","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"JOB","ReadOnly",True)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SUFFIX","Caption","Suffix")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SUFFIX","MinWidth","30")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SUFFIX","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SUFFIX","CellHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SUFFIX","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SUFFIX","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SUFFIX","ReadOnly",True)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SEQUENCE","Caption","Sequence")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SEQUENCE","MinWidth","50")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SEQUENCE","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SEQUENCE","CellHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SEQUENCE","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SEQUENCE","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SEQUENCE","ReadOnly",True)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PART","Caption","Part")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PART","MinWidth","150")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PART","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PART","CellHAlignment","Left")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PART","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PART","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"PART","ReadOnly",True)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"DESCRIPTION","Caption","Part Description")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"DESCRIPTION","MinWidth","250")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"DESCRIPTION","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"DESCRIPTION","CellHAlignment","Left")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"DESCRIPTION","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"DESCRIPTION","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"DESCRIPTION","ReadOnly",True)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"UM","Caption","UM")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"UM","Width","40")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"UM","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"UM","CellHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"UM","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"UM","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"UM","ReadOnly",True)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QTY_ESTIMATED","Caption","Qty Estimated")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QTY_ESTIMATED","MinWidth","100")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QTY_ESTIMATED","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QTY_ESTIMATED","CellHAlignment","Right")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QTY_ESTIMATED","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QTY_ESTIMATED","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QTY_ESTIMATED","ReadOnly",True)
+	
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QUANTITY","Caption","Qty Actual")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QUANTITY","MinWidth","100")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QUANTITY","HeaderHAlignment","Center")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QUANTITY","CellHAlignment","Right")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QUANTITY","HeaderFontBold","True")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QUANTITY","AllowEdit",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"QUANTITY","ReadOnly",True)
+		
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SELECT_LINE","ShowCaption",False)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SELECT_LINE","Width","30")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SELECT_LINE","Fixed","Left")
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SELECT_LINE","AllowEdit",True)
+	Gui.frmMain.[V.Args.GridControl].SetColumnProperty(V.Args.GridView,"SELECT_LINE","ReadOnly",False)
+	
+	
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Build("Subroutine Error {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub("Unload")	
+F.Intrinsic.Control.EndTry
+Program.Sub.FormatConsPackListLine.End
+
+Program.Sub.UnLoad.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+
+	F.Intrinsic.Control.If(V.ODBC.conx.State,=,1)
+		F.ODBC.Connection!conx.close
+	F.Intrinsic.Control.EndIf
+	
+	F.Intrinsic.Control.If(V.DataTable.dtConsPackList.Exists)
+		F.Intrinsic.Control.If(V.DataView.dtConsPackList!dvConsPackList.Exists)
+			F.Data.DataView.Close("dtConsPackList$dtLine","dvConsPackListLine")
+			F.Data.DataView.Close("dtConsPackList","dvConsPackList")
+		F.Intrinsic.Control.EndIf
+		F.Data.DataTable.Close("dtConsPackList$dtLine")
+		F.Data.DataTable.close("dtConsPackList")
+	F.Intrinsic.Control.EndIf
+		
+	F.Intrinsic.Control.End
+
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Build("Subroutine Error {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End	
+F.Intrinsic.Control.EndTry
+Program.Sub.UnLoad.End
+
+Program.Sub.frmMain_UnLoad.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+
+	F.Intrinsic.Control.CallSub(UnLoad)
+
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Build("Subroutine Error {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry
+Program.Sub.frmMain_UnLoad.End
+
+Program.Sub.gsgcPackingList_CellValueChanged.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	V.Local.sFilter.Declare
+	V.Local.sRet.Declare
+	V.Local.iRow.Declare
+		
+	F.Intrinsic.Control.If(V.Args.Column,=,"SELECT_LINE")
+		F.Intrinsic.Control.If(V.Args.Value,=,True)
+			F.Intrinsic.String.Build("PO = '{0}' and PO_LINE = '{1}'",V.DataTable.dtConsPackList$dtLine(V.Args.RowIndex).PO!FieldVal,V.DataTable.dtConsPackList$dtLine(V.Args.RowIndex).PO_LINE!FieldVal,V.Local.sFilter)
+			F.Data.DataTable.Select("dtConsPackList",V.Local.sFilter,V.Local.sRet)
+			F.Intrinsic.Control.If(V.Local.sRet,<>,"***NORETURN***")
+				F.Intrinsic.String.Split(V.Local.sRet,"*!*",V.Local.sRet)
+				V.Local.iRow.Set(V.Local.sRet(0).Long)
+				F.Intrinsic.Control.If(V.DataTable.dtConsPackList(V.Local.iRow).SELECT_HEADER!FieldVal,=,False)
+					F.Data.DataTable.SetValue("dtConsPackList",V.Local.iRow,"SELECT_HEADER",True)
+				F.Intrinsic.Control.EndIf
+			F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.ElseIf(V.Args.Column,=,"SELECT_HEADER")	
+		F.Intrinsic.Control.If(V.Args.Value,=,False)		
+			F.Intrinsic.String.Build("PO = '{0}' and PO_LINE = '{1}'",V.DataTable.dtConsPackList(V.Args.RowIndex).PO!FieldVal,V.DataTable.dtConsPackList(V.Args.RowIndex).PO_LINE!FieldVal,V.Local.sFilter)
+			F.Data.DataView.Create("dtConsPackList$dtLine","dvTempLine",22,V.Local.sFilter,"")
+			F.Data.DataView.SetValue("dtConsPackList$dtLine","dvTempLine",-1,"SELECT_LINE",False)
+			F.Data.DataView.Close("dtConsPackList$dtLine","dvTempLine")
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.EndIf
+	
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Build("Subroutine Error {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry
+Program.Sub.gsgcPackingList_CellValueChanged.End
+
+Program.Sub.cmdExpandAll_Click.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	V.Local.iCnt.Declare
+	
+	F.Intrinsic.Control.For(V.Local.iCnt,0,V.DataTable.dtConsPackList.RowCount--,1)
+		Gui.frmMain.gsgcPackingList.ExpandMasterRow("gvConsPackList",V.Local.iCnt)
+	F.Intrinsic.Control.Next(V.Local.iCnt)
+	
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Build("Subroutine Error {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry
+Program.Sub.cmdExpandAll_Click.End
+
+Program.Sub.cmdCollapseAll_Click.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	V.Local.iCnt.Declare
+	
+	F.Intrinsic.Control.For(V.Local.iCnt,0,V.DataTable.dtConsPackList.RowCount--,1)
+		Gui.frmMain.gsgcPackingList.CollapseMasterRow("gvConsPackList",V.Local.iCnt)
+	F.Intrinsic.Control.Next(V.Local.iCnt)
+	
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Build("Subroutine Error {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry
+Program.Sub.cmdCollapseAll_Click.End
+
+Program.Sub.cmdRefresh_Click.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	
+	F.Intrinsic.Control.CallSub(LoadConsolidatedPackingList)
+	
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Build("Subroutine Error {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry	
+Program.Sub.cmdRefresh_Click.End
+
+Program.Sub.SetPictureBox.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	V.Local.sPicFilename.Declare
+
+	F.Intrinsic.String.Build("{0}\Gab\Gas\{1}",V.Caller.PluginsDir,"GAB_6386_CollapseAll_24x.png",V.Local.sPicFilename)
+	Gui.frmMain.picCollapseAll.Picture(V.Local.sPicFilename)
+	
+	F.Intrinsic.String.Build("{0}\Gab\Gas\{1}",V.Caller.PluginsDir,"GAB_6386_ExpandAll_24x.png",V.Local.sPicFilename)
+	Gui.frmMain.picExpandAll.Picture(V.Local.sPicFilename)
+	
+	F.Intrinsic.String.Build("{0}\Gab\Gas\{1}",V.Caller.PluginsDir,"GAB_6386_Refresh_24x.png",V.Local.sPicFilename)
+	Gui.frmMain.picRefresh.Picture(V.Local.sPicFilename)
+	
+	F.Intrinsic.String.Build("{0}\Gab\Gas\{1}",V.Caller.PluginsDir,"GAB_6386_PrintPreview_24x.png",V.Local.sPicFilename)
+	Gui.frmMain.picPrintPreview.Picture(V.Local.sPicFilename)
+	
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Build("Subroutine Error {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry	
+Program.Sub.SetPictureBox.End
+
+Program.Sub.CheckCustomTables.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	V.Local.bExist.Declare
+
+	F.ODBC.Connection!conx.TableExists("GAB_6386_PACK_LIST",v.Local.bExist)
+	F.Intrinsic.Control.If(v.Local.bExist.Not)
+		F.ODBC.Connection!conx.Execute("CREATE TABLE GAB_6386_PACK_LIST(USER_ID CHAR(8) NOT NULL, TERMINAL CHAR(3) NOT NULL, PO CHAR(7) NOT NULL, PO_LINE CHAR(3) NOT NULL, LINE_TYPE CHAR(1) NOT NULL, KEY_SEQ CHAR(6) NOT NULL, VENDOR CHAR(6) NOT NULL, PART CHAR(20) NOT NULL, DESCRIPTION CHAR(44) NOT NULL, QUANTITY NUMERIC(13,4) NOT NULL, UM CHAR(2) NOT NULL, JOB CHAR(6) NOT NULL, SUFFIX CHAR(3) NOT NULL, SEQUENCE CHAR(6) NOT NULL, DATE_SHIPPED DATE NOT NULL);")
+		F.ODBC.Connection!conx.Execute("CREATE INDEX GAB_6386_PACK_LIST ON GAB_6386_PACK_LIST ( USER_ID, TERMINAL );")
+	F.Intrinsic.Control.EndIf
+	
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Build("Subroutine Error {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry	
+Program.Sub.CheckCustomTables.End
+
+Program.Sub.cmdPrintPreview_Click.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	V.Local.sRet.Declare
+	V.Local.iKeySeq.Declare
+	V.Local.sKeySeq.Declare
+	V.Local.iCntHeader.Declare
+	V.Local.iCntLine.Declare
+	V.Local.sFilter.Declare
+	V.Local.sMapper.Declare
+	V.Local.sBIParam.Declare
+	V.Local.sBIParamVal.Declare
+	V.Local.iRet.Declare
+	V.Local.sMessage.Declare
+	V.Local.sQuery.Declare
+	
+	'Get Selected Header Data
+	F.Data.DataTable.Select("dtConsPackList","SELECT_HEADER = True",V.Local.sRet)
+	F.Intrinsic.Control.If(V.Local.sRet,<>,"***NORETURN***")
+		F.Intrinsic.Control.If(V.DataTable.dtSelectedHeader.Exists,=,True)
+			F.Data.DataTable.Close("dtSelectedHeader")
+		F.Intrinsic.Control.EndIf
+		F.Data.DataView.Create("dtConsPackList","dvSelectedHeader",22,"SELECT_HEADER = True","PO ASC, PO_LINE ASC")
+		F.Data.DataView.ToDataTable("dtConsPackList","dvSelectedHeader","dtSelectedHeader",True)
+		F.Data.DataView.Close("dtConsPackList","dvselectedHeader")
+		
+		'Add new columns to DataTable dtSelectedHeader
+		F.Data.DataTable.AddColumn("dtSelectedHeader","USER_ID","String",V.Caller.User,8)
+		F.Data.DataTable.AddColumn("dtSelectedHeader","TERMINAL","String",V.Caller.Terminal,3)
+		F.Data.DataTable.AddColumn("dtSelectedHeader","LINE_TYPE","String","H",1)
+		F.Data.DataTable.AddColumn("dtSelectedHeader","KEY_SEQ","String","",6)
+		F.Data.DataTable.AddColumn("dtSelectedHeader","DATE_SHIPPED","Date",V.Ambient.Date.PervasiveDate)
+		
+		'Remove not needed columns from DataTable dtSelectedHeader
+		F.Data.DataTable.RemoveColumn("dtSelectedHeader","SELECT_HEADER")
+	F.Intrinsic.Control.EndIf
+		
+	'Get Selected Line Data
+	F.Data.DataTable.Select("dtConsPackList$dtLine","SELECT_LINE = True",V.Local.sRet)
+	F.Intrinsic.Control.If(V.Local.sRet,<>,"***NORETURN***")
+		F.Intrinsic.Control.If(V.DataTable.dtSelectedLine.Exists,=,True)
+			F.Data.DataTable.Close("dtSelectedLine")
+		F.Intrinsic.Control.EndIf
+		F.Data.DataView.Create("dtConsPackList$dtLine","dvSelectedLine",22,"SELECT_LINE = True","PO ASC, PO_LINE ASC")
+		F.Data.DataView.ToDataTable("dtConsPackList","dvSelectedLine","dtSelectedLine",True)
+		F.Data.DataView.Close("dtConsPackList","dvselectedLine")
+		
+		'Add new columns to DataTable dtSelectedLine
+		F.Data.DataTable.AddColumn("dtSelectedLine","USER_ID","String",V.Caller.User,8)
+		F.Data.DataTable.AddColumn("dtSelectedLine","TERMINAL","String",V.Caller.Terminal,3)
+		F.Data.DataTable.AddColumn("dtSelectedLine","LINE_TYPE","String","L",1)
+		F.Data.DataTable.AddColumn("dtSelectedLine","KEY_SEQ","String","",6)
+		F.Data.DataTable.AddColumn("dtSelectedLine","DATE_SHIPPED","Date",V.Ambient.Date.PervasiveDate)
+		F.Data.DataTable.AddColumn("dtSelectedLine","VENDOR","String","")
+		
+		'Remove not needed columns from DataTable dtSelectedLine
+		F.Data.DataTable.RemoveColumn("dtSelectedLine","SELECT_LINE")
+		F.Data.DataTable.RemoveColumn("dtSelectedLine","QTY_ESTIMATED")
+	F.Intrinsic.Control.EndIf
+	
+	'Only process the data if the DataTable dtSelectedHeader exists
+	F.Intrinsic.Control.If(V.DataTable.dtSelectedHeader.Exists)
+		V.Local.iKeySeq.Set(0)
+		F.Intrinsic.Control.For(V.Local.iCntHeader,0,V.DataTable.dtSelectedHeader.RowCount--,1)
+			F.Intrinsic.Math.Add(V.Local.iKeySeq,1,V.Local.iKeySeq)
+			F.Intrinsic.String.LPad(V.Local.iKeySeq,"0",6,V.Local.sKeySeq)
+			F.Data.DataTable.SetValue("dtSelectedHeader",V.Local.iCntHeader,"KEY_SEQ",V.Local.sKeySeq)
+
+			F.Intrinsic.Control.If(V.DataTable.dtSelectedLine.Exists)
+				'Filter dtSelectedLine for the same PO & PO_LINE
+				F.Intrinsic.String.Build("PO = '{0}' and PO_LINE = '{1}'",V.DataTable.dtSelectedHeader(V.Local.iCntHeader).PO!FieldVal,V.DataTable.dtSelectedHeader(V.Local.iCntHeader).PO_LINE!FieldVal,V.Local.sFilter)
+				F.Data.DataTable.Select("dtSelectedLine",V.Local.sFilter,V.Local.sRet)
+				F.Intrinsic.Control.If(V.Local.sRet,<>,"***NORETURN***")
+					F.Intrinsic.String.Split(V.Local.sRet,"*!*",V.Local.sRet)
+					F.Intrinsic.Control.For(V.Local.iCntLine,0,V.Local.sRet.UBound,1)
+						F.Intrinsic.Math.Add(V.Local.iKeySeq,1,V.Local.iKeySeq)
+						F.Intrinsic.String.LPad(V.Local.iKeySeq,"0",6,V.Local.sKeySeq)
+						F.Data.DataTable.SetValue("dtSelectedLine",V.Local.sRet(V.Local.iCntLine),"VENDOR",V.DataTable.dtSelectedHeader(V.Local.iCntHeader).VENDOR!FieldVal,"KEY_SEQ",V.Local.sKeySeq)
+					F.Intrinsic.Control.Next(V.Local.iCntLine)
+				F.Intrinsic.Control.EndIf
+			F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.Next(V.Local.iCntHeader)
+		
+		'Merge dtSelectedHeader & dtSelectedLine
+		F.Intrinsic.Control.If(V.DataTable.dtSelectedLine.Exists)
+			F.Data.DataTable.Merge("dtSelectedLine","dtSelectedHeader",True,2)
+			F.Data.DataTable.Close("dtSelectedLine")
+		F.Intrinsic.Control.EndIf
+		
+		'Clear the customer for this USER_ID & TERMINAL
+		F.Intrinsic.Control.CallSub(ClearCustomTables)
+		
+		'Save the DataTable to database in table GAB_6386_PACK_LIST
+		V.Local.sMapper.Set("USER_ID@!@USER_ID*!*TERMINAL@!@TERMINAL*!*PO@!@PO*!*PO_LINE@!@PO_LINE*!*LINE_TYPE@!@LINE_TYPE*!*KEY_SEQ@!@KEY_SEQ*!*VENDOR@!@VENDOR*!*PART@!@PART*!*DESCRIPTION@!@DESCRIPTION*!*QUANTITY@!@QUANTITY*!*UM@!@UM*!*JOB@!@JOB*!*SUFFIX@!@SUFFIX*!*SEQUENCE@!@SEQUENCE*!*DATE_SHIPPED@!@DATE_SHIPPED")
+		F.Data.DataTable.SaveToDB("dtSelectedHeader","conx","GAB_6386_PACK_LIST","",128,V.Local.sMapper)
+		
+		'Delete DataTable dtSelectedHeader
+		F.Data.DataTable.Close("dtSelectedHeader")
+		
+		'Print the BI Report
+		F.Intrinsic.Control.If(V.Global.iReportID,=,-1)
+			F.Intrinsic.String.Build("GAB_6386_CON_PACKLIST.rpt is not set up yet in Business Intelligence.{0}Please set it up first.",V.Ambient.NewLine,V.Local.sMessage)
+			F.Intrinsic.UI.Msgbox(V.Local.sMessage,"Notification")
+		F.Intrinsic.Control.Else			
+			V.Local.sBIParam.Set("UserID*!*Terminal")
+			F.Intrinsic.String.Split("UserID*!*Terminal","*!*",V.Local.sBIParam)
+			F.Intrinsic.String.Concat(V.Caller.User,"*!*",V.Caller.Terminal,V.Local.sBIParamVal)
+			F.Intrinsic.String.Split(V.Local.sBIParamVal,"*!*",V.Local.sBIParamVal)
+			F.Global.BI.PrintReport(V.Global.iReportID,16,V.Local.sBIParam,V.Local.sBIParamVal,"GSVIEW",False)
+			F.Intrinsic.UI.Sleep(2)
+			F.Intrinsic.UI.Msgbox("Does the report print successfully?","Consolidated Packing List",4,V.Local.iRet)
+			F.Intrinsic.Control.If(V.Local.iRet,=,6)
+				F.Intrinsic.String.Build("UPDATE PO_LINES SET PACK_LST_PRNT = 'Y' FROM GAB_6386_PACK_LIST A INNER JOIN PO_LINES B ON A.PO = B.PURCHASE_ORDER AND A.PO_LINE = LEFT(B.RECORD_NO,3) AND A.LINE_TYPE = 'H' WHERE USER_ID = '{0}' AND TERMINAL = '{1}'",V.Caller.User,V.Caller.Terminal,V.Local.sQuery)
+				F.ODBC.Connection!conx.Execute(V.Local.sQuery)
+				F.Intrinsic.Control.CallSub(LoadConsolidatedPackingList)
+			F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.EndIf
+	
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Build("Subroutine Error {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry	
+Program.Sub.cmdPrintPreview_Click.End
+
+Program.Sub.ClearCustomTables.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+	V.Local.sQuery.Declare
+
+	F.Intrinsic.String.Build("DELETE FROM GAB_6386_PACK_LIST WHERE USER_ID = '{0}' AND TERMINAL = '{1}'",V.Caller.User,V.Caller.Terminal,V.Local.sQuery)
+	F.ODBC.Connection!conx.Execute(V.Local.sQuery)
+	
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Build("Subroutine Error {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub("Unload")
+F.Intrinsic.Control.EndTry	
+Program.Sub.ClearCustomTables.End
+
+Program.Sub.Comments.Start
+${$5$}$3.0.0.0$}$1
+${$6$}$tdjohan$}$20210614180236145$}$8rAQhOSvlohpQhMDm1j544LwmwXnRbkhJvR/TvoE0B4STMw08CmvHoVJIrGHByaD64qOFDPIVzQ=
+Program.Sub.Comments.End
